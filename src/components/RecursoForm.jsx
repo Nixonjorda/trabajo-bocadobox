@@ -23,29 +23,18 @@ export function RecursoForm({ titulo, campos = [], valoresIniciales = {}, onGuar
     }
     if ('stock' in inicial) {
       inicial.stockAnterior = inicial.stock;
-      if (inicial.estado === 'false') inicial.stock = 0;
-      if (inicial.stock !== '' && Number(inicial.stock) <= 0) inicial.estado = 'false';
+      // El stock y el estado son independientes: marcar como "Agotado"
+      // no modifica el valor del inventario.
     }
     return inicial;
   });
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState(null);
 
-  const actualizar = (name, value) => setForm((f) => {
-    if (name === 'estado' && 'stock' in f) {
-      return {
-        ...f,
-        estado: value,
-        stock: value === 'false' ? 0 : f.stockAnterior,
-        stockAnterior: value === 'false' ? f.stock : f.stockAnterior,
-      };
-    }
-    return {
-      ...f,
-      [name]: value,
-      ...(name === 'stock' && f.estado !== 'false' ? { stockAnterior: value } : {}),
-    };
-  });
+  const actualizar = (name, value) => setForm((f) => ({
+    ...f,
+    [name]: value,
+  }));
 
   const enviar = async (e) => {
     e.preventDefault();
@@ -61,7 +50,6 @@ export function RecursoForm({ titulo, campos = [], valoresIniciales = {}, onGuar
       const payload = {};
       for (const c of campos) {
         let v = form[c.name];
-        if (c.name === 'stock' && form.estado === 'false') v = 0;
         if (c.tipo === 'number') v = v === '' || v == null ? 0 : Number(v);
         payload[c.name] = v;
       }

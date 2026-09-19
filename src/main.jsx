@@ -11,6 +11,9 @@ createRoot(document.getElementById('root')).render(
         {/* Al entrar a la raíz se redirige al recurso principal (productos) */}
         <Route path="/" element={<Navigate to="/productos" replace />} />
 
+        {/* Vista de autenticación */}
+        <Route path="/login" element={<App />} />
+
         {/* Cada recurso del sistema queda mapeado a su propia ruta.
             App detecta el :recurso de la URL y pinta la vista + los datos
             correspondientes traídos del mock de Postman. */}

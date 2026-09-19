@@ -16,6 +16,11 @@ const ICONO_RED = {
 const FALLBACK = {
   marca: 'Bocado Box',
   razonSocial: 'Bocado Box S.A.S.',
+  eslogan: 'Nutrición Real en Cada Bocado',
+  mision:
+    'Ofrecer experiencias gastronómicas saludables, conscientes y deliciosas mediante ingredientes 100% naturales, apoyando a productores locales y promoviendo el bienestar integral.',
+  vision:
+    'Ser la cadena referente de comida saludable y sostenible líder en el país, transformando positivamente los hábitos alimenticios de nuestra comunidad.',
   descripcion:
     'Restaurante de comida consciente y saludable. Diseñamos bowls nutritivos, cajas de proteína y ensaladas gourmet con ingredientes de origen local, aderezos artesanales y sin azúcares añadidos.',
   horario: 'Lunes a Domingo: 11:00 AM – 10:00 PM',
@@ -54,7 +59,10 @@ export function Footer({ onSelectVista = () => {} }) {
   const info = (Array.isArray(data) && data[0]) ? data[0] : {};
 
   const marca       = info.marca       ?? FALLBACK.marca;
+  const eslogan     = info.eslogan     ?? FALLBACK.eslogan;
   const descripcion = info.descripcion ?? FALLBACK.descripcion;
+  const mision      = info.mision      ?? FALLBACK.mision;
+  const vision      = info.vision      ?? FALLBACK.vision;
   const horario     = info.horario     ?? FALLBACK.horario;
   const telefono    = info.telefono    ?? FALLBACK.telefono;
   const email       = info.email       ?? FALLBACK.email;
@@ -100,10 +108,24 @@ export function Footer({ onSelectVista = () => {} }) {
                   {marcaAccent && <span className="brand-accent">{marcaAccent}</span>}
                 </span>
               </div>
+              {eslogan && <p className="footer-brand-slogan">✨ {eslogan}</p>}
               <p className="footer-brand-tagline">{descripcion}</p>
+
+              {/* Misión y Visión Institucional Dinámica */}
+              <div className="footer-institutional-box">
+                <div className="institutional-item">
+                  <strong className="institutional-title">🎯 Misión:</strong>
+                  <p className="institutional-text">{mision}</p>
+                </div>
+                <div className="institutional-item">
+                  <strong className="institutional-title">👁️ Visión:</strong>
+                  <p className="institutional-text">{vision}</p>
+                </div>
+              </div>
+
               <div className="footer-social-links">
                 {redes.map((r, idx) => (
-                  <a href={r.url || '#'} className="social-btn" title={`${r.red} de ${marca}`} key={idx}>
+                  <a href={r.url || '#'} className="social-btn" title={`${r.red} de ${marca}`} key={idx} target="_blank" rel="noopener noreferrer">
                     {(ICONO_RED[r.red] || '🔗')} {r.handle}
                   </a>
                 ))}

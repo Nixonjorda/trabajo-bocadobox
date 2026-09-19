@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import './App.css';
 import { Header } from './components/Header';
@@ -23,6 +23,41 @@ import { getCampos, getTitulo, LABEL_RECURSO } from './config/formularios';
 
 // Recursos válidos que exponen una ruta propia (/productos, /clientes, ...)
 const VISTAS_VALIDAS = ['productos', 'categorias', 'clientes', 'ordenes', 'usuarios', 'estados'];
+const VISTAS_PROTEGIDAS = ['clientes', 'ordenes', 'usuarios', 'estados'];
+
+// 3 Perfiles autorizados exclusivos para login (Admin, Mesero y Otro/Cliente)
+export const PERFILES_AUTORIZADOS = [
+  {
+    id: 'perfil-admin',
+    email: 'admin@bocadobox.co',
+    usuario: 'admin',
+    clave: 'admin123',
+    nombre: 'Laura Beltrán (Admin)',
+    rol: 'Administrador',
+    icono: '👑',
+    descripcion: 'Acceso total a todos los módulos y gestión del sistema.',
+  },
+  {
+    id: 'perfil-mesero',
+    email: 'mesero@bocadobox.co',
+    usuario: 'mesero',
+    clave: 'mesero123',
+    nombre: 'Diego Moreno (Mesero)',
+    rol: 'Mesero',
+    icono: '🍽️',
+    descripcion: 'Gestión de barra fría, comandas y órdenes.',
+  },
+  {
+    id: 'perfil-otro',
+    email: 'cliente@bocadobox.co',
+    usuario: 'cliente',
+    clave: 'cliente123',
+    nombre: 'Camila Ríos (Cliente)',
+    rol: 'Cliente',
+    icono: '🥑',
+    descripcion: 'Consulta de carta saludable y pedido personal.',
+  },
+];
 
 // Mapeo del id de estado del pedido a la clase visual de la insignia
 const CLASE_ESTADO = {
@@ -43,7 +78,7 @@ function App() {
   // ---------------------------------------------------------------------------
   const navigate = useNavigate();
   const { recurso } = useParams();
-  const vistaActiva = VISTAS_VALIDAS.includes(recurso) ? recurso : 'productos';
+  const vistaActiva = recurso === 'login' ? 'login' : VISTAS_VALIDAS.includes(recurso) ? recurso : 'productos';
   const irAVista = (id) => navigate(`/${id}`);
 
   // Estados de catálogo y filtros de Bocado Box
@@ -53,8 +88,17 @@ function App() {
   // Estados del pedido (Box) / Carrito
   const [cartItems, setCartItems] = useState([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
+  const [isPaymentOpen, setIsPaymentOpen] = useState(false);
+  const [cancelConfirm, setCancelConfirm] = useState(null);
+  const [metodoPago, setMetodoPago] = useState('Tarjeta de crédito');
+  const [loginForm, setLoginForm] = useState({ email: '', password: '' });
   const [toastMessage, setToastMessage] = useState(null);
   const [modal, setModal] = useState(null);
+  const [usuarioActivo, setUsuarioActivo] = useState(() => {
+    const guardado = localStorage.getItem('usuarioActivo');
+    return guardado ? JSON.parse(guardado) : null;
+  });
   const [mesaActiva, setMesaActiva] = useState(() => {
     const mesaGuardada = Number(localStorage.getItem('mesaActiva'));
     return Number.isInteger(mesaGuardada) && mesaGuardada > 0 ? mesaGuardada : 4;
@@ -142,21 +186,23 @@ function App() {
     setModal(null);
   };
 
-  const cancelarOrden = async (orden) => {
-    const identificador = orden.numero || orden.id;
-    const confirmado = window.confirm(
-      `¿Quieres cancelar la orden ${identificador} de ${orden.ubicacion || 'esta mesa'}? Esta acción no se puede deshacer.`
-    );
-    if (!confirmado) return;
+  const cancelarOrden = (orden) => {
+    setCancelConfirm(orden);
+  };
+
+  const confirmarCancelacion = async () => {
+    if (!cancelConfirm) return;
 
     try {
-      await eliminarRecurso('orden', orden.id);
+      await eliminarRecurso('orden', cancelConfirm.id);
       ordenesReq.reintentar();
       setToastMessage('✅ Orden cancelada correctamente.');
       setTimeout(() => setToastMessage(null), 3000);
     } catch (error) {
       setToastMessage(`⚠️ ${error.message || 'No se pudo cancelar la orden.'}`);
       setTimeout(() => setToastMessage(null), 4000);
+    } finally {
+      setCancelConfirm(null);
     }
   };
 
@@ -183,18 +229,142 @@ function App() {
   const totalCartCount = cartItems.reduce((acc, curr) => acc + curr.cantidad, 0);
   const totalCartPrice = cartItems.reduce((acc, curr) => acc + curr.precio * curr.cantidad, 0);
 
+  useEffect(() => {
+    if (recurso === 'login' && usuarioActivo) {
+      navigate('/productos', { replace: true });
+      return;
+    }
+
+    if (!usuarioActivo && VISTAS_PROTEGIDAS.includes(vistaActiva)) {
+      navigate('/login', { replace: true });
+    }
+  }, [usuarioActivo, vistaActiva, recurso, navigate]);
+
+  const manejarMetodoPago = (metodo) => {
+    setMetodoPago(metodo);
+    setIsPaymentOpen(false);
+    setToastMessage(`✅ Método de pago seleccionado: ${metodo}`);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
+
+  const manejarLogin = async (event) => {
+    event.preventDefault();
+
+    const email = loginForm.email.trim().toLowerCase();
+    const password = loginForm.password.trim();
+
+    if (!email || !password) {
+      setToastMessage('⚠️ Ingresa correo o usuario y contraseña.');
+      setTimeout(() => setToastMessage(null), 3000);
+      return;
+    }
+
+    // 1. Verificación estricta contra los 3 perfiles oficiales (Admin, Mesero y Otro/Cliente)
+    const perfilExacto = PERFILES_AUTORIZADOS.find(
+      (p) => p.email.toLowerCase() === email || p.usuario.toLowerCase() === email
+    );
+
+    if (perfilExacto) {
+      if (perfilExacto.clave !== password) {
+        setToastMessage(`❌ Contraseña incorrecta para el perfil "${perfilExacto.rol}".`);
+        setTimeout(() => setToastMessage(null), 3500);
+        return;
+      }
+
+      const usuarioSesion = {
+        id: perfilExacto.id,
+        nombre: perfilExacto.nombre,
+        email: perfilExacto.email,
+        usuario: perfilExacto.usuario,
+        rol: perfilExacto.rol,
+        icono: perfilExacto.icono,
+      };
+
+      localStorage.setItem('usuarioActivo', JSON.stringify(usuarioSesion));
+      setUsuarioActivo(usuarioSesion);
+      setToastMessage(`✅ Bienvenido(a), ${usuarioSesion.nombre} (${usuarioSesion.rol})!`);
+      setTimeout(() => setToastMessage(null), 3500);
+      setLoginForm({ email: '', password: '' });
+      setIsLoginOpen(false);
+      navigate('/productos', { replace: true });
+      return;
+    }
+
+    // 2. Verificación estricta contra usuarios del Mock API (correo y clave exacta)
+    try {
+      const usuarios = await getUsuarios();
+      const usuarioBase = usuarios.find((usuario) => {
+        const coincideEmail = String(usuario.email || '').trim().toLowerCase() === email;
+        const coincideUsuario = String(usuario.usuario || '').trim().toLowerCase() === email;
+        return coincideEmail || coincideUsuario;
+      });
+
+      if (usuarioBase) {
+        const claveValida = usuarioBase.clave || usuarioBase.password;
+        if (claveValida && claveValida !== password) {
+          setToastMessage(`❌ Contraseña incorrecta para el usuario "${usuarioBase.usuario || usuarioBase.email}".`);
+          setTimeout(() => setToastMessage(null), 3500);
+          return;
+        }
+
+        const usuarioSesion = {
+          id: usuarioBase.id || Date.now(),
+          nombre: usuarioBase.nombre || (email.includes('@') ? email.split('@')[0] : email),
+          email: usuarioBase.email || email,
+          usuario: usuarioBase.usuario || email,
+          rol: usuarioBase.rol || 'Cliente',
+          icono: usuarioBase.icono || '👤',
+        };
+
+        localStorage.setItem('usuarioActivo', JSON.stringify(usuarioSesion));
+        setUsuarioActivo(usuarioSesion);
+        setToastMessage(`✅ Bienvenido(a), ${usuarioSesion.nombre} (${usuarioSesion.rol})!`);
+        setTimeout(() => setToastMessage(null), 3500);
+        setLoginForm({ email: '', password: '' });
+        setIsLoginOpen(false);
+        navigate('/productos', { replace: true });
+        return;
+      }
+    } catch {
+      // Fallo de consulta a la API
+    }
+
+    // 3. Si no coincide con ninguno de los autorizados, RECHAZO ESTRICTO
+    setToastMessage('⛔ Acceso denegado: Credenciales no autorizadas. Solo se admiten los perfiles autorizados.');
+    setTimeout(() => setToastMessage(null), 4000);
+  };
+
+  const cerrarSesion = () => {
+    localStorage.removeItem('usuarioActivo');
+    setUsuarioActivo(null);
+    setIsLoginOpen(false);
+    navigate('/login', { replace: true });
+  };
+
   const confirmarPedido = async () => {
+    if (!usuarioActivo) {
+      setToastMessage('⚠️ Debes iniciar sesión para confirmar tu compra.');
+      setTimeout(() => setToastMessage(null), 3000);
+      navigate('/login', { replace: true });
+      return;
+    }
+
     const mesaFormateada = String(mesaActiva).padStart(2, '0');
     const siguienteMesa = mesaActiva >= 10 ? 1 : mesaActiva + 1;
     const orden = {
       numero: `ORD-${Date.now()}`,
-      cliente: `Comensal Mesa #${mesaFormateada}`,
+      cliente: usuarioActivo.nombre || usuarioActivo.usuario || 'Cliente Bocado Box',
+      usuarioId: usuarioActivo.id,
+      usuarioEmail: usuarioActivo.email,
+      usuarioNombre: usuarioActivo.nombre,
       estadoId: 'EST-01',
       estado: 'Pendiente',
       ubicacion: `Mesa #${mesaFormateada}`,
       productos: cartItems.map((item) => `${item.cantidad}x ${item.nombre}`).join(', '),
       cantidadItems: totalCartCount,
       total: totalCartPrice,
+      metodoPago: metodoPago,
     };
 
     try {
@@ -233,11 +403,53 @@ function App() {
         onSelectVista={irAVista}
         cartCount={totalCartCount}
         onOpenCart={() => setIsCartOpen(true)}
+        onOpenLogin={() => setIsLoginOpen(true)}
+        onOpenPayment={() => setIsPaymentOpen(true)}
+        onLogout={cerrarSesion}
+        usuarioActivo={usuarioActivo}
         mesaActiva={mesaActiva}
       />
 
+      {vistaActiva === 'login' && (
+        <section className="view-section auth-page-view">
+          <div className="auth-page-card">
+            <div className="auth-page-header">
+              <p className="auth-kicker">Acceso Restringido</p>
+              <h2>Inicia sesión en Bocado Box</h2>
+              <p className="auth-subtitle">Solo perfiles autorizados con credenciales válidas</p>
+            </div>
+
+            <form className="auth-form" onSubmit={manejarLogin}>
+              <label className="auth-field">
+                <span>Correo o usuario</span>
+                <input
+                  type="text"
+                  value={loginForm.email}
+                  onChange={(event) => setLoginForm({ ...loginForm, email: event.target.value })}
+                  placeholder="admin@bocadobox.co / mesero@bocadobox.co"
+                />
+              </label>
+
+              <label className="auth-field">
+                <span>Contraseña</span>
+                <input
+                  type="password"
+                  value={loginForm.password}
+                  onChange={(event) => setLoginForm({ ...loginForm, password: event.target.value })}
+                  placeholder="Contraseña del perfil"
+                />
+              </label>
+
+              <button className="auth-submit-btn" type="submit">
+                Entrar a la plataforma
+              </button>
+            </form>
+          </div>
+        </section>
+      )}
+
       {/* Componente Transversal: Encabezado / Hero Banner Contextual */}
-      <Encabezado vistaActiva={vistaActiva} />
+      {vistaActiva !== 'login' && <Encabezado vistaActiva={vistaActiva} />}
 
       {/* Contenedor Principal Adaptable */}
       <main className="app-container">
@@ -488,6 +700,7 @@ function App() {
                       <span className="order-client-name">Cliente: {ord.cliente}</span>
                     </div>
                     <p className="order-items-summary">{ord.productos}</p>
+                    <p className="order-payment-summary">💳 Método de pago: {ord.metodoPago || 'No registrado'}</p>
                     <div className="order-card-footer">
                       <span className="order-total-price">{formatearPrecio(ord.total)}</span>
                       <div className="order-card-actions">
@@ -646,6 +859,112 @@ function App() {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal de método de pago */}
+      {isPaymentOpen && (
+        <div className="payment-modal-backdrop" onClick={() => setIsPaymentOpen(false)}>
+          <div className="payment-modal-card" onClick={(event) => event.stopPropagation()}>
+            <div className="payment-modal-header">
+              <div>
+                <p className="payment-kicker">Pago</p>
+                <h3>Selecciona tu método</h3>
+              </div>
+              <button className="payment-close-btn" type="button" onClick={() => setIsPaymentOpen(false)}>
+                ✕
+              </button>
+            </div>
+
+            <div className="payment-options-list">
+              {['Tarjeta de crédito', 'Nequi', 'Daviplata', 'Efectivo'].map((metodo) => (
+                <button
+                  key={metodo}
+                  type="button"
+                  className={`payment-option ${metodoPago === metodo ? 'selected' : ''}`}
+                  onClick={() => manejarMetodoPago(metodo)}
+                >
+                  <span className="payment-option-icon">{metodo === 'Tarjeta de crédito' ? '💳' : metodo === 'Nequi' ? '📱' : metodo === 'Daviplata' ? '💸' : '💵'}</span>
+                  <span>{metodo}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="payment-summary-box">
+              <span>Pago actual</span>
+              <strong>{metodoPago}</strong>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmación de cancelación de orden */}
+      {cancelConfirm && (
+        <div className="cancel-confirm-backdrop" onClick={() => setCancelConfirm(null)}>
+          <div className="cancel-confirm-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="cancel-confirm-header">
+              <span className="cancel-confirm-label">localhost:5173 dice</span>
+              <button type="button" className="cancel-confirm-close" onClick={() => setCancelConfirm(null)}>
+                ✕
+              </button>
+            </div>
+
+            <p className="cancel-confirm-message">
+              ¿Quieres cancelar la orden {cancelConfirm.numero || cancelConfirm.id} de Mesa #{cancelConfirm.ubicacion?.replace(/\D+/g, '') || '00'}? Esta acción no se puede deshacer.
+            </p>
+
+            <div className="cancel-confirm-actions">
+              <button type="button" className="cancel-confirm-btn secondary" onClick={() => setCancelConfirm(null)}>
+                Cancelar
+              </button>
+              <button type="button" className="cancel-confirm-btn primary" onClick={confirmarCancelacion}>
+                Aceptar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de inicio de sesión / registro */}
+      {isLoginOpen && (
+        <div className="auth-modal-backdrop" onClick={() => setIsLoginOpen(false)}>
+          <div className="auth-modal-card" onClick={(event) => event.stopPropagation()}>
+            <div className="auth-modal-header">
+              <div>
+                <p className="auth-kicker">Acceso Restringido</p>
+                <h3>Iniciar Sesión</h3>
+              </div>
+              <button className="auth-close-btn" type="button" onClick={() => setIsLoginOpen(false)}>
+                ✕
+              </button>
+            </div>
+
+            <form className="auth-form" onSubmit={manejarLogin}>
+              <label className="auth-field">
+                <span>Correo o usuario</span>
+                <input
+                  type="text"
+                  value={loginForm.email}
+                  onChange={(event) => setLoginForm({ ...loginForm, email: event.target.value })}
+                  placeholder="admin@bocadobox.co / mesero@bocadobox.co"
+                />
+              </label>
+
+              <label className="auth-field">
+                <span>Contraseña</span>
+                <input
+                  type="password"
+                  value={loginForm.password}
+                  onChange={(event) => setLoginForm({ ...loginForm, password: event.target.value })}
+                  placeholder="Contraseña del perfil"
+                />
+              </label>
+
+              <button className="auth-submit-btn" type="submit">
+                Entrar a la plataforma
+              </button>
+            </form>
           </div>
         </div>
       )}
