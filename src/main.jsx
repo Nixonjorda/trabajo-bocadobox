@@ -6,7 +6,7 @@ import App from './App.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL}>
       <Routes>
         {/* Al entrar a la raíz se redirige al recurso principal (productos) */}
         <Route path="/" element={<Navigate to="/productos" replace />} />
