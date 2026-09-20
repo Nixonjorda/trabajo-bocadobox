@@ -1,19 +1,12 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import './index.css'
 import App from './App.jsx'
 
-const basename =
-  import.meta.env.DEV
-    ? '/'
-    : window.location.pathname.includes('/trabajo-bocadoBox')
-      ? '/trabajo-bocadoBox'
-      : '/'
-
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <BrowserRouter basename={basename}>
+    <HashRouter>
       <Routes>
         {/* Al entrar a la raíz se redirige al recurso principal (productos) */}
         <Route path="/" element={<Navigate to="/productos" replace />} />
@@ -29,6 +22,6 @@ createRoot(document.getElementById('root')).render(
         {/* Cualquier ruta desconocida regresa al catálogo de productos */}
         <Route path="*" element={<Navigate to="/productos" replace />} />
       </Routes>
-    </BrowserRouter>
+    </HashRouter>
   </StrictMode>,
 )
