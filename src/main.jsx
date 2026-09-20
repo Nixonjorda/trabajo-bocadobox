@@ -4,9 +4,16 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import './index.css'
 import App from './App.jsx'
 
+const basename =
+  import.meta.env.DEV
+    ? '/'
+    : window.location.pathname.includes('/trabajo-bocadoBox')
+      ? '/trabajo-bocadoBox'
+      : '/'
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <BrowserRouter basename={import.meta.env.BASE_URL}>
+    <BrowserRouter basename={basename}>
       <Routes>
         {/* Al entrar a la raíz se redirige al recurso principal (productos) */}
         <Route path="/" element={<Navigate to="/productos" replace />} />
